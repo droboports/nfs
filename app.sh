@@ -7,7 +7,7 @@ local URL="http://sourceforge.net/projects/libtirpc/files/libtirpc/${VERSION}/${
 
 _download_bz2 "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-gssapi
+./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi
 make
 make install
 mkdir -p "${DEST}/etc"
