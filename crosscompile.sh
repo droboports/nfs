@@ -1,9 +1,9 @@
-export DROBO="5n"
+export DROBO="fs"
 export TOOLCHAIN=~/xtools/toolchain/${DROBO}
-export ARCH="armv7-a"
-export HOST="arm-marvell-linux-gnueabi"
+export ARCH="armv5te"
+export HOST="arm-none-linux-gnueabi"
 export PATH="${TOOLCHAIN}/bin:~/bin:$PATH"
-export CFLAGS="-march=${ARCH} -mcpu=marvell-pj4 -mfpu=vfpv3-d16 -mfloat-abi=softfp"
+export CFLAGS="-march=${ARCH} -mtune=arm926ej-s"
 export CXXFLAGS="${CFLAGS}"
 export CC="${TOOLCHAIN}/bin/${HOST}-gcc"
 export CXX="${TOOLCHAIN}/bin/${HOST}-g++"

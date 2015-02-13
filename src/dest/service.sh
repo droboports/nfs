@@ -76,6 +76,7 @@ _is_running() {
   if ! _is_pid_running "${rpcbind}" "${rpcbind_pid}"; then return 1; fi
   if [[ -z "$(grep ^nfsd /proc/mounts)" ]]; then return 1; fi
   if [[ -z "$(lsmod | grep ^nfsd)" ]]; then return 1; fi
+  if [[ -z "$(lsmod | grep ^exportfs)" ]]; then return 1; fi
   return 0;
 }
 
@@ -88,17 +89,12 @@ start() {
                          "${prog_dir}/var/lib/nfs/sm.bak" \
                          "${prog_dir}/var/lib/nfs/state"
 
+  if [[ -z "$(lsmod | grep ^exportfs)" ]]; then
+    /sbin/insmod "${prog_dir}/modules/$(uname -r)/exportfs.ko"
+  fi
+
   if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
-    local kversion="$(uname -r)"
-    # fversion is a string like "3.2.0 [8.45.72385]"
-    local fversion="$(grep "<mVersion>.*</mVersion>" /var/log/nasd.log | head -n1 | sed "s|.*<mVersion>\(.*\)</mVersion>.*|\1|g")"
-    case "${fversion}" in
-      3.2*) kversion="${kversion}-1" ;;
-      3.1*) kversion="${kversion}" ;;
-      3.0*) kversion="${kversion}" ;;
-      *) echo "Unsupported firmware revision: ${fversion}"; return 1 ;;
-    esac
-    /sbin/insmod "${prog_dir}/modules/${kversion}/nfsd.ko"
+    /sbin/insmod "${prog_dir}/modules/$(uname -r)/nfsd.ko"
   fi
 
   if [[ -z "$(grep ^nfsd /proc/mounts)" ]]; then
@@ -141,11 +137,16 @@ stop_service() {
     /bin/umount "${mountpoint}"
   fi
 
+  if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
+    mkdir -p "/lib/modules/$(uname -r)"
+  fi
+
   if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
-    if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-      mkdir -p "/lib/modules/$(uname -r)"
-    fi
     /sbin/rmmod "nfsd"
+  fi
+
+  if [[ -z "$(lsmod | grep ^exportfs)" ]]; then
+    /sbin/rmmod "exportfs"
   fi
 }
 

@@ -1,3 +1,23 @@
+export LIBATOMIC="${PWD}/target/linux-atomic"
+
+### ATOMIC ###
+_build_atomic() {
+# The GCC toolchain for the DroboFS does not support
+# atomic builtins. This is a workaround.
+
+# From GCC 4.7.0
+#_download_file "linux-atomic.c" "https://gcc.gnu.org/git/?p=gcc.git;a=blob_plain;f=libgcc/config/arm/linux-atomic.c;hb=93c5ebd73a4d1626d25203081d079cdd68222fcc"
+# From HEAD
+_download_file "linux-atomic.c" "https://gcc.gnu.org/git/?p=gcc.git;a=blob_plain;f=libgcc/config/arm/linux-atomic.c"
+
+mkdir -p "target/linux-atomic"
+cp -vf "download/linux-atomic.c" "target/linux-atomic/"
+pushd "target/linux-atomic"
+libtool --tag=CC --mode=compile "${CC}" ${CFLAGS} ${CPPFLAGS} -MT linux-atomic.lo -MD -MP -MF linux-atomic.Tpo -c -o linux-atomic.lo linux-atomic.c
+libtool --tag=CC --mode=link "${CC}" ${CFLAGS} ${LDFLAGS} -o liblinux-atomic.la linux-atomic.lo
+popd
+}
+
 ### LIBTIRPC ###
 _build_libtirpc() {
 local VERSION="0.2.5"
@@ -7,7 +27,7 @@ local URL="http://sourceforge.net/projects/libtirpc/files/libtirpc/${VERSION}/${
 
 _download_bz2 "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi
+./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic"
 make
 make install
 mkdir -p "${DEST}/etc"
@@ -21,11 +41,12 @@ local VERSION="0.2.2"
 local FOLDER="rpcbind-${VERSION}"
 local FILE="${FOLDER}.tar.bz2"
 local URL="http://sourceforge.net/projects/rpcbind/files/rpcbind/${VERSION}/${FILE}"
+local SRC_INCLUDE="${PWD}/src/include"
 
 _download_bz2 "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --mandir="${DEST}/man" --without-systemdsystemunitdir
-make
+PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --mandir="${DEST}/man" --without-systemdsystemunitdir CPPFLAGS="${CPPFLAGS:-} -I${SRC_INCLUDE}" LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic"
+make -j1
 make install
 popd
 }
@@ -39,7 +60,8 @@ local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.25/${FILE}"
 
 _download_xz "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-./configure --host=arm-none-linux-gnueabi --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --without-systemd --without-ncurses --without-python --without-bashcompletiondir --disable-all-programs --enable-libblkid
+./configure --host=arm-none-linux-gnueabi --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --without-systemd --without-ncurses --without-python --without-bashcompletiondir --disable-all-programs --enable-libblkid scanf_cv_alloc_modifier=as
+echo "#define mkostemp(file,flags) mkstemp(file)" >> config.h
 make
 make install
 ln -vfs "libblkid.so.1.1.0" "${DEST}/lib/libblkid.so"
@@ -83,7 +105,7 @@ for f in $files; do sed -i -e "s|/var/run/sm-notify.pid|/tmp/DroboApps/nfs/sm-no
 files="support/include/exportfs.h utils/statd/sm-notify.c utils/idmapd/idmapd.c utils/mount/nfs4mount.c utils/gssd/gssd.h utils/blkmapd/device-discovery.c"
 for f in $files; do sed -i -e "s|\"/var/lib|\"${DEST}/var/lib|g" $f; done
 
-PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --exec-prefix="${DEST}" --sbindir="${DEST}/sbin" --mandir="${DEST}/man" --disable-static --with-statedir="${DEST}/var/lib/nfs" --with-statdpath="${DEST}/var/lib/nfs" --with-statduser=nobody --with-start-statd="${DEST}/sbin/start-statd" --without-systemd --with-mountfile="${DEST}/etc/nfsmounts.conf" --without-tcp-wrappers --enable-tirpc --enable-ipv6 --disable-nfsv4 --disable-nfsv41 --disable-gss CC_FOR_BUILD=$CC libblkid_cv_is_recent=yes
+PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --exec-prefix="${DEST}" --sbindir="${DEST}/sbin" --mandir="${DEST}/man" --disable-static --with-statedir="${DEST}/var/lib/nfs" --with-statdpath="${DEST}/var/lib/nfs" --with-statduser=nobody --with-start-statd="${DEST}/sbin/start-statd" --without-systemd --with-mountfile="${DEST}/etc/nfsmounts.conf" --without-tcp-wrappers --enable-tirpc --enable-ipv6 --disable-nfsv4 --disable-nfsv41 --disable-gss CC_FOR_BUILD=$CC LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic" libblkid_cv_is_recent=yes
 make
 make install
 mkdir -p "${DEST}/etc/exports.d" "${DEST}/var/lib/nfs/statd" "${DEST}/var/lock/subsys" "${DEST}/var/log" "${DEST}/var/run"
@@ -103,12 +125,12 @@ cp -vf "download/${VERSION}/${FILE}" "${DEST}/modules/${VERSION}/"
 }
 
 _build() {
+  _build_atomic
   _build_libtirpc
   _build_rpcbind
   _build_libblkid
   _build_nfsutils
-  _build_module 3.2.27 nfsd.ko
-  _build_module 3.2.27-1 nfsd.ko
-  _build_module 3.2.58 nfsd.ko
+  _build_module 2.6.22.18 exportfs.ko
+  _build_module 2.6.22.18 nfsd.ko
   _package
 }
