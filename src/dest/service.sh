@@ -85,7 +85,8 @@ start() {
   set -x # enable script trace
   /bin/chmod 4511 "${prog_dir}/sbin/mount.nfs"
   chown -R "${statuser}" "${prog_dir}/var/lib/nfs/sm" \
-                         "${prog_dir}/var/lib/nfs/sm.bak"
+                         "${prog_dir}/var/lib/nfs/sm.bak" \
+                         "${prog_dir}/var/lib/nfs/state"
 
   if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
     local kversion="$(uname -r)"
