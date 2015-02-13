@@ -4,10 +4,6 @@ export LIBATOMIC="${PWD}/target/linux-atomic"
 _build_atomic() {
 # The GCC toolchain for the DroboFS does not support
 # atomic builtins. This is a workaround.
-
-# From GCC 4.7.0
-#_download_file "linux-atomic.c" "https://gcc.gnu.org/git/?p=gcc.git;a=blob_plain;f=libgcc/config/arm/linux-atomic.c;hb=93c5ebd73a4d1626d25203081d079cdd68222fcc"
-# From HEAD
 _download_file "linux-atomic.c" "https://gcc.gnu.org/git/?p=gcc.git;a=blob_plain;f=libgcc/config/arm/linux-atomic.c"
 
 mkdir -p "target/linux-atomic"
@@ -53,15 +49,16 @@ popd
 
 ### LIBBLKID ###
 _build_libblkid() {
-local VERSION="2.25.2"
+# util-linux-2.22.2 is the last version that supports glibc-2.5
+# v2.23 uses mkostemp, which requires at least glibc-2.7
+local VERSION="2.22.2"
 local FOLDER="util-linux-${VERSION}"
 local FILE="${FOLDER}.tar.xz"
-local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.25/${FILE}"
+local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.22/${FILE}"
 
 _download_xz "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-./configure --host=arm-none-linux-gnueabi --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --without-systemd --without-ncurses --without-python --without-bashcompletiondir --disable-all-programs --enable-libblkid scanf_cv_alloc_modifier=as
-echo "#define mkostemp(file,flags) mkstemp(file)" >> config.h
+./configure --host=arm-none-linux-gnueabi --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --without-ncurses --disable-{mount,losetup,fsck,partx,uuidd,mountpoint,fallocate,unshare,arch,ddate,eject,agetty,cramfs,wdctl,switch_root,pivot_root,elvtune,kill,last,utmpdump,line,mesg,raw,rename,reset,vipw,newgrp,chfn-chsh,login,sulogin,su,schedutils,wall,write,chkdupexe} --enable-libblkid scanf_cv_alloc_modifier=as
 make
 make install
 ln -vfs "libblkid.so.1.1.0" "${DEST}/lib/libblkid.so"
