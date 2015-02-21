@@ -48,7 +48,7 @@ _is_pid_running() {
 # _is_nfsd_running
 # returns: 0 if nfsd is running, 1 if not running.
 _is_nfsd_running() {
-  /usr/bin/pgrep nfsd > /dev/null
+  /usr/bin/killall -0 nfsd 2> /dev/null
 }
 
 # _kill_pid
