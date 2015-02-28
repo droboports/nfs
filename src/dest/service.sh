@@ -3,7 +3,7 @@
 # NFSv3 server
 
 # import DroboApps framework functions
-source /etc/service.subr
+. /etc/service.subr
 
 ### app-specific section
 
@@ -22,131 +22,189 @@ statusfile="/tmp/DroboApps/${name}/status.txt"
 errorfile="/tmp/DroboApps/${name}/error.txt"
 
 # app-specific variables
-prog_dir="$(dirname $(readlink -fn ${0}))"
-
+prog_dir="$(dirname $(realpath ${0}))"
 rpcbind="${prog_dir}/bin/rpcbind"
 mountd="${prog_dir}/sbin/rpc.mountd"
-daemon="${prog_dir}/sbin/rpc.nfsd"
 statd="${prog_dir}/sbin/rpc.statd"
-notify="${prog_dir}/sbin/sm-notify"
+nfsd="${prog_dir}/sbin/rpc.nfsd"
+smnotify="${prog_dir}/sbin/sm-notify"
 
 statuser="nobody"
 mountpoint="/proc/fs/nfsd"
 lockfile="/tmp/DroboApps/${name}/rpcbind.lock"
-rpcbind_pid="/tmp/DroboApps/${name}/rpcbind.pid"
-statd_pid="/tmp/DroboApps/${name}/rpc.statd.pid"
-notify_pid="/tmp/DroboApps/${name}/sm-notify.pid"
 
 # _is_pid_running
 # $1: daemon
 # $2: pidfile
 # returns: 0 if pid is running, 1 if not running or if pidfile does not exist.
 _is_pid_running() {
-  /sbin/start-stop-daemon -K -s 0 -x "$1" -p "$2" -q
+  start-stop-daemon -K -t -x "${1}" -p "${2}" -q
 }
 
-# _is_nfsd_running
-# returns: 0 if nfsd is running, 1 if not running.
-_is_nfsd_running() {
-  /usr/bin/killall -0 nfsd 2> /dev/null
+# _is_daemon_running
+# $1: daemon
+# returns: 0 if daemon is running, 1 if not running.
+_is_daemon_running() {
+  start-stop-daemon -K -t -x "${1}" -q
+}
+
+# _is_name_running
+# returns: 0 if process name is running, 1 if not running.
+_is_name_running() {
+  killall -0 "${1}" 2> /dev/null
 }
 
 # _kill_pid
 # $1: daemon
 # $2: pidfile
 _kill_pid() {
-  if _is_pid_running "$1" "$2"; then
-    /sbin/start-stop-daemon -K -s 15 -x "$1" -p "$2" -q
+  if _is_pid_running "${1}" "${2}"; then
+    start-stop-daemon -K -x "${1}" -p "${2}" -q
   fi
 }
 
-# _kill_nfsd
-_kill_nfsd() {
-  if _is_nfsd_running; then
-    killall -9 nfsd
+# _kill_daemon
+# $1: daemon
+_kill_daemon() {
+  if _is_daemon_running "${1}"; then
+    start-stop-daemon -K -x "${1}" -q
+  fi
+}
+
+# _kill_name
+# $1: process name
+_kill_name() {
+  if _is_name_running "${1}"; then
+    killall -9 "${1}"
   fi
 }
 
 # _is_running
-# returns: 0 if nfs is running, 1 if not running.
+# returns: 0 if app is running, 1 if not running.
 _is_running() {
-  if ! _is_nfsd_running; then return 1; fi
-  if ! _is_pid_running "${statd}" "${statd_pid}"; then return 1; fi
-  if ! _is_pid_running "${mountd}" "${pidfile}"; then return 1; fi
-  if ! _is_pid_running "${rpcbind}" "${rpcbind_pid}"; then return 1; fi
+  if ! _is_name_running "nfsd"; then return 1; fi
+  if ! _is_daemon_running "${statd}"; then return 1; fi
+  if ! _is_daemon_running "${mountd}"; then return 1; fi
+  if ! _is_pid_running "${rpcbind}" "${pidfile}"; then return 1; fi
   if [[ -z "$(grep ^nfsd /proc/mounts)" ]]; then return 1; fi
-  if [[ -z "$(lsmod | grep ^nfsd)" ]]; then return 1; fi
   return 0;
+}
+
+# _is_stopped
+# returns: 0 if stopped, 1 if running.
+_is_stopped() {
+  if _is_name_running "nfsd"; then return 1; fi
+  if _is_daemon_running "${statd}"; then return 1; fi
+  if _is_daemon_running "${mountd}"; then return 1; fi
+  if _is_pid_running "${rpcbind}" "${pidfile}"; then return 1; fi
+  if [[ ! -z "$(grep ^nfsd /proc/mounts)" ]]; then return 1; fi
+  return 0;
+}
+
+# returns a string like "3.2.0 [8.45.72385]"
+#         or nothing if nasd is not running
+_firmware_version() {
+  local line
+  /usr/bin/nc 127.0.0.1 5000 2> "${logfile}" | while read line; do
+    if (echo ${line} | grep -q mVersion); then
+      echo ${line} | sed 's|.*<mVersion>\(.*\)</mVersion>.*|\1|g'
+      break;
+    fi
+  done
+}
+
+_load_modules() {
+  local kversion="$(uname -r)"
+  local fversion="$(_firmware_version)"
+  local modules="nfsd"
+  case "${fversion}" in
+    3.2*) kversion="${kversion}-1" ;;
+    3.1*|3.0*) kversion="${kversion}" ;;
+    0.0*) kversion="${kversion}" ; modules="auth_rpcgss ${modules}" ;;
+    *) echo "Unsupported firmware revision: ${fversion}"; return 1 ;;
+  esac
+  for ko in ${modules}; do
+    if [[ -z "$(lsmod | grep ^${ko})" ]]; then
+      insmod "${prog_dir}/modules/${kversion}/${ko}.ko"
+    fi
+  done
 }
 
 start() {
   set -u # exit on unset variable
   set -e # exit on uncaught error code
   set -x # enable script trace
-  /bin/chmod 4511 "${prog_dir}/sbin/mount.nfs"
+  local force_restart=0
+  chmod 4511 "${prog_dir}/sbin/mount.nfs"
   chown -R "${statuser}" "${prog_dir}/var/lib/nfs/sm" \
                          "${prog_dir}/var/lib/nfs/sm.bak" \
                          "${prog_dir}/var/lib/nfs/state"
-
-  if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
-    local kversion="$(uname -r)"
-    # fversion is a string like "3.2.0 [8.45.72385]"
-    local fversion="$(grep "<mVersion>.*</mVersion>" /var/log/nasd.log | head -n1 | sed "s|.*<mVersion>\(.*\)</mVersion>.*|\1|g")"
-    case "${fversion}" in
-      3.2*) kversion="${kversion}-1" ;;
-      3.1*) kversion="${kversion}" ;;
-      3.0*) kversion="${kversion}" ;;
-      *) echo "Unsupported firmware revision: ${fversion}"; return 1 ;;
-    esac
-    /sbin/insmod "${prog_dir}/modules/${kversion}/nfsd.ko"
-  fi
+  _load_modules
 
   if [[ -z "$(grep ^nfsd /proc/mounts)" ]]; then
-    /bin/mount -t nfsd nfsd "${mountpoint}"
+    mount -t nfsd nfsd "${mountpoint}"
   fi
 
-  _kill_pid "${notify}" "${notify_pid}"
+  _kill_daemon "${smnotify}"
 
-  if ! _is_pid_running "${rpcbind}" "${rpcbind_pid}"; then
-    "${rpcbind}" -d & echo $! > "${rpcbind_pid}"
+  if ! _is_pid_running "${rpcbind}" "${pidfile}"; then
+    force_restart=1
+    setsid "${rpcbind}" -d & echo $! > "${pidfile}"
     sleep 1
   fi
 
-  if ! _is_pid_running "${mountd}" "${pidfile}"; then
-    "${mountd}" -F & echo $! > "${pidfile}"
-    sleep 1
+  if [[ ${force_restart} -eq 1 ]]; then
+    _kill_name "nfsd"
+    _kill_daemon "${statd}"
+    _kill_daemon "${mountd}"
   fi
 
-  if ! _is_pid_running "${statd}" "${statd_pid}"; then
-    "${statd}" -F & echo $! > "${statd_pid}"
-    sleep 1
+  if ! _is_daemon_running "${mountd}"; then
+    setsid "${mountd}" -F -d auth &
   fi
 
-  if ! _is_nfsd_running; then
-    "${prog_dir}/sbin/rpc.nfsd" -d 3 &
-  else
-    _service_reload
+  if ! _is_daemon_running "${statd}"; then
+    setsid "${statd}" -F -d &
   fi
+
+  if ! _is_name_running "nfsd"; then
+    setsid "${prog_dir}/sbin/rpc.nfsd" -d 3
+  fi
+
+  reload_service
 }
 
 # override /etc/service.subrc
 stop_service() {
-  _kill_nfsd
-  _kill_pid "${notify}" "${notify_pid}"
-  _kill_pid "${statd}" "${statd_pid}"
-  _kill_pid "${mountd}" "${pidfile}"
-  _kill_pid "${rpcbind}" "${rpcbind_pid}"
+  if _is_stopped; then
+    echo ${name} is not running >&3
+    if [[ "${1:-}" == "-f" ]]; then
+      return 0
+    else
+      return 1
+    fi
+  fi
+
+  _kill_name "nfsd"
+  _kill_daemon "${smnotify}"
+  _kill_daemon "${statd}"
+  _kill_daemon "${mountd}"
+  _kill_pid "${rpcbind}" "${pidfile}"
 
   if [[ -n "$(grep ^nfsd /proc/mounts)" ]]; then
-    /bin/umount "${mountpoint}"
+    umount "${mountpoint}"
   fi
 
   if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
     if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
       mkdir -p "/lib/modules/$(uname -r)"
     fi
-    /sbin/rmmod "nfsd"
+    rmmod "nfsd"
   fi
+}
+
+reload_service() {
+  "${prog_dir}/sbin/exportfs" -ra
 }
 
 ### common section
@@ -182,14 +240,20 @@ _service_stop() {
   stop_service
 }
 
+_service_waitstop() {
+  stop_service -f
+  while ! _is_stopped; do
+    sleep 1
+  done
+}
+
 _service_restart() {
-  _service_stop
-  sleep 3
+  _service_waitstop
   _service_start
 }
 
 _service_reload() {
-  "${prog_dir}/sbin/exportfs" -ra
+  reload_service
 }
 
 _service_status() {
@@ -197,8 +261,7 @@ _service_status() {
 }
 
 _service_help() {
-  echo "Usage: $0 [start|stop|restart|reload|status]" >&3
-  set +e # disable error code check
+  echo "Usage: $0 [start|stop|waitstop|reload|restart|status]" >&3
   exit 1
 }
 
@@ -206,6 +269,6 @@ _service_help() {
 set -o xtrace
 
 case "${1:-}" in
-  start|stop|restart|reload|status) _service_${1} ;;
+  start|stop|waitstop|reload|restart|status) _service_${1} ;;
   *) _service_help ;;
 esac

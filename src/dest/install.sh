@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# NFS install script
+# install script
 
 prog_dir="$(dirname $(realpath ${0}))"
 name="$(basename ${prog_dir})"
@@ -9,6 +9,7 @@ logfile="/tmp/DroboApps/${name}/install.log"
 # script hardening
 set -o errexit  # exit on uncaught error code
 set -o nounset  # exit on unset variable
+set -o pipefail # propagate last error code on pipe
 
 # ensure log folder exists
 if ! grep -q ^tmpfs /proc/mounts; then mount -t tmpfs tmpfs /tmp; fi
@@ -25,9 +26,9 @@ echo $(date +"%Y-%m-%d %H-%M-%S"): ${0} ${@}
 set -o xtrace
 
 # copy default configuration files
-for deffile in ${prog_dir}/etc/*.default; do
-  basefile="${prog_dir}/etc/$(basename ${deffile} .default)"
-  if [ ! -f "${basefile}" ]; then
-    cp "${deffile}" "${basefile}"
+find "${prog_dir}" -type f -name "*.default" -print | while read deffile; do
+  basefile="$(dirname ${deffile})/$(basename ${deffile} .default)"
+  if [[ ! -f "${basefile}" ]]; then
+    cp -vf "${deffile}" "${basefile}"
   fi
 done
