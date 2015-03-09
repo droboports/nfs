@@ -115,12 +115,7 @@ _firmware_version() {
 
 _load_modules() {
   local kversion="$(uname -r)"
-  local fversion="$(_firmware_version)"
   local modules="exportfs nfsd"
-  case "${fversion}" in
-    1.2*|1.1*|1.0*) kversion="${kversion}" ;;
-    *) echo "Unsupported firmware revision: ${fversion}"; return 1 ;;
-  esac
   for ko in ${modules}; do
     if [[ -z "$(lsmod | grep ^${ko})" ]]; then
       insmod "${prog_dir}/modules/${kversion}/${ko}.ko"
@@ -192,24 +187,6 @@ stop_service() {
 
   if [[ -n "$(grep ^nfsd /proc/mounts)" ]]; then
     umount "${mountpoint}"
-  fi
-
-  if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-    mkdir -p "/lib/modules/$(uname -r)"
-  fi
-
-  if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
-    if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-      mkdir -p "/lib/modules/$(uname -r)"
-    fi
-    rmmod "nfsd"
-  fi
-
-  if [[ -z "$(lsmod | grep ^exportfs)" ]]; then
-    if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-      mkdir -p "/lib/modules/$(uname -r)"
-    fi
-    rmmod "exportfs"
   fi
 }
 
