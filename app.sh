@@ -111,7 +111,7 @@ _build() {
   _build_libblkid
   _build_nfsutils
   _build_module 3.2.27 nfsd.ko
-  _build_module 3.2.27-1 nfsd.ko
+  _build_module 3.2.27-3.2.0 nfsd.ko
   _build_module 3.2.58 nfsd.ko
   _package
 }

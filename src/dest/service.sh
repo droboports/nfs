@@ -118,7 +118,7 @@ _load_modules() {
   local fversion="$(_firmware_version)"
   local modules="nfsd"
   case "${fversion}" in
-    3.2*) kversion="${kversion}-1" ;;
+    3.2*) kversion="${kversion}-3.2.0" ;;
     3.1*|3.0*) kversion="${kversion}" ;;
     0.0*) kversion="${kversion}" ; modules="auth_rpcgss ${modules}" ;;
     *) echo "Unsupported firmware revision: ${fversion}"; return 1 ;;
@@ -193,13 +193,6 @@ stop_service() {
 
   if [[ -n "$(grep ^nfsd /proc/mounts)" ]]; then
     umount "${mountpoint}"
-  fi
-
-  if [[ -z "$(lsmod | grep ^nfsd)" ]]; then
-    if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-      mkdir -p "/lib/modules/$(uname -r)"
-    fi
-    rmmod "nfsd"
   fi
 }
 
