@@ -7,7 +7,7 @@
 
 framework_version="2.1"
 name="nfs"
-version="1.3.2"
+version="1.3.2-1"
 description="NFS v3 server"
 depends=""
 webui=""
