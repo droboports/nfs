@@ -1,13 +1,16 @@
 ### LIBTIRPC ###
 _build_libtirpc() {
-local VERSION="0.2.5"
+local VERSION="0.3.2"
 local FOLDER="libtirpc-${VERSION}"
 local FILE="${FOLDER}.tar.bz2"
 local URL="http://sourceforge.net/projects/libtirpc/files/libtirpc/${VERSION}/${FILE}"
 
 _download_bz2 "${FILE}" "${URL}" "${FOLDER}"
+cp -vf "src/${FOLDER}-api_fixes-1.patch" "target/${FOLDER}/"
 pushd "target/${FOLDER}"
-
+patch -p1 -i "${FOLDER}-api_fixes-1.patch"
+aclocal
+automake
 sed -i -e "s|/etc/netconfig|${DEST}/etc/netconfig|g" tirpc/netconfig.h
 
 ./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi
@@ -20,7 +23,7 @@ popd
 
 ### RPCBIND ###
 _build_rpcbind() {
-local VERSION="0.2.2"
+local VERSION="0.2.3"
 local FOLDER="rpcbind-${VERSION}"
 local FILE="${FOLDER}.tar.bz2"
 local URL="http://sourceforge.net/projects/rpcbind/files/rpcbind/${VERSION}/${FILE}"
@@ -35,10 +38,10 @@ popd
 
 ### LIBBLKID ###
 _build_libblkid() {
-local VERSION="2.25.2"
+local VERSION="2.26.2"
 local FOLDER="util-linux-${VERSION}"
 local FILE="${FOLDER}.tar.xz"
-local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.25/${FILE}"
+local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.26/${FILE}"
 
 _download_xz "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
@@ -112,6 +115,7 @@ _build() {
   _build_nfsutils
   _build_module 3.2.27 nfsd.ko
   _build_module 3.2.27-3.2.0 nfsd.ko
-  _build_module 3.2.58 nfsd.ko
+  _build_module 3.2.58-3.5.0 nfsd.ko
+  _build_module 3.2.58-3.5.0 auth_rpcgss.ko
   _package
 }
