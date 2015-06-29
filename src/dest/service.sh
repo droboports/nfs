@@ -26,6 +26,11 @@ statuser="nobody"
 mountpoint="/proc/fs/nfsd"
 lockfile="${tmp_dir}/rpcbind.lock"
 
+# backwards compatibility
+if [ -z "${FRAMEWORK_VERSION:-}" ]; then
+  . "${prog_dir}/libexec/service.subr"
+fi
+
 # _is_daemon_running
 # $1: daemon
 # returns: 0 if daemon is running, 1 if not running.
