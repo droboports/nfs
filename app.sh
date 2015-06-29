@@ -29,7 +29,7 @@ aclocal
 automake
 sed -i -e "s|/etc/netconfig|${DEST}/etc/netconfig|g" tirpc/netconfig.h
 
-./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic"
+./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi --disable-ipv6 LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic"
 make
 make install
 mkdir -p "${DEST}/etc"
@@ -108,7 +108,7 @@ for f in $files; do sed -i -e "s|/var/run/sm-notify.pid|/tmp/DroboApps/nfs/sm-no
 files="support/include/exportfs.h utils/statd/sm-notify.c utils/idmapd/idmapd.c utils/mount/nfs4mount.c utils/gssd/gssd.h utils/blkmapd/device-discovery.c"
 for f in $files; do sed -i -e "s|\"/var/lib|\"${DEST}/var/lib|g" $f; done
 
-PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --exec-prefix="${DEST}" --sbindir="${DEST}/sbin" --mandir="${DEST}/man" --disable-static --with-statedir="${DEST}/var/lib/nfs" --with-statdpath="${DEST}/var/lib/nfs" --with-statduser=nobody --with-start-statd="${DEST}/sbin/start-statd" --without-systemd --with-mountfile="${DEST}/etc/nfsmounts.conf" --without-tcp-wrappers --enable-tirpc --enable-ipv6 --disable-nfsv4 --disable-nfsv41 --disable-gss CC_FOR_BUILD=$CC LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic" libblkid_cv_is_recent=yes
+PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --exec-prefix="${DEST}" --sbindir="${DEST}/sbin" --mandir="${DEST}/man" --disable-static --with-statedir="${DEST}/var/lib/nfs" --with-statdpath="${DEST}/var/lib/nfs" --with-statduser=nobody --with-start-statd="${DEST}/sbin/start-statd" --without-systemd --with-mountfile="${DEST}/etc/nfsmounts.conf" --without-tcp-wrappers --enable-tirpc --enable-ipv6 --disable-nfsv4 --disable-nfsv41 --disable-gss --disable-ipv6 CC_FOR_BUILD=$CC LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic" libblkid_cv_is_recent=yes
 make
 make install
 mkdir -p "${DEST}/etc/exports.d" "${DEST}/var/lib/nfs/statd" "${DEST}/var/lock/subsys" "${DEST}/var/log" "${DEST}/var/run"
