@@ -16,14 +16,17 @@ popd
 
 ### LIBTIRPC ###
 _build_libtirpc() {
-local VERSION="0.2.5"
+local VERSION="0.3.2"
 local FOLDER="libtirpc-${VERSION}"
 local FILE="${FOLDER}.tar.bz2"
 local URL="http://sourceforge.net/projects/libtirpc/files/libtirpc/${VERSION}/${FILE}"
 
 _download_bz2 "${FILE}" "${URL}" "${FOLDER}"
+cp -vf "src/${FOLDER}-api_fixes-1.patch" "target/${FOLDER}/"
 pushd "target/${FOLDER}"
-
+patch -p1 -i "${FOLDER}-api_fixes-1.patch"
+aclocal
+automake
 sed -i -e "s|/etc/netconfig|${DEST}/etc/netconfig|g" tirpc/netconfig.h
 
 ./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi LDFLAGS="${LDFLAGS:-} -L${LIBATOMIC} -L${LIBATOMIC}/.libs" LIBS="-llinux-atomic"
@@ -36,7 +39,7 @@ popd
 
 ### RPCBIND ###
 _build_rpcbind() {
-local VERSION="0.2.2"
+local VERSION="0.2.3"
 local FOLDER="rpcbind-${VERSION}"
 local FILE="${FOLDER}.tar.bz2"
 local URL="http://sourceforge.net/projects/rpcbind/files/rpcbind/${VERSION}/${FILE}"
