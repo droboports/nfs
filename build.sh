@@ -24,13 +24,13 @@ exec 2> >(tee -a "${logfile}" >&2)
 ### environment setup ###
 source crosscompile.sh
 export NAME="$(basename ${PWD})"
-export DEST="/mnt/DroboFS/Shares/DroboApps/${NAME}"
+export DEST="${BUILD_DEST:-/mnt/DroboFS/Shares/DroboApps/${NAME}}"
 export DEPS="${PWD}/target/install"
 export CFLAGS="${CFLAGS:-} -Os -fPIC"
 export CXXFLAGS="${CXXFLAGS:-} ${CFLAGS}"
 export CPPFLAGS="-I${DEPS}/include"
 export LDFLAGS="${LDFLAGS:-} -Wl,-rpath,${DEST}/lib -L${DEST}/lib"
-alias make="make -j8 V=1 VERBOSE=1"
+alias make="make -j4 V=1 VERBOSE=1"
 
 ### support functions ###
 # Download a TAR file and unpack it, removing old files.
