@@ -1,0 +1,1 @@
+/mnt/DroboFS/System/DNAS/configs/shares.conf IN_CREATE,IN_DELETE,IN_CLOSE_WRITE /mnt/DroboFS/Shares/DroboApps/nfs/service.sh reload

@@ -7,7 +7,7 @@
 
 framework_version="2.1"
 name="nfs"
-version="1.3.2-1"
+version="1.3.2-2"
 description="NFS v3 server"
 depends=""
 webui=""
@@ -26,10 +26,23 @@ statuser="nobody"
 mountpoint="/proc/fs/nfsd"
 lockfile="${tmp_dir}/rpcbind.lock"
 
+conffile="${prog_dir}/etc/exports"
+autofile="${conffile}.auto"
+shares_conf="/mnt/DroboFS/System/DNAS/configs/shares.conf"
+shares_dir="/mnt/DroboFS/Shares"
+rescan=""
+
 # backwards compatibility
 if [ -z "${FRAMEWORK_VERSION:-}" ]; then
+  framework_version="2.0"
   . "${prog_dir}/libexec/service.subr"
 fi
+
+# _is_name_running
+# returns: 0 if process name is running, 1 if not running.
+_is_name_running() {
+  killall -0 "${1}" 2> /dev/null
+}
 
 # _is_daemon_running
 # $1: daemon
@@ -38,34 +51,32 @@ _is_daemon_running() {
   start-stop-daemon -K -t -x "${1}" -q
 }
 
-# _is_name_running
-# returns: 0 if process name is running, 1 if not running.
-_is_name_running() {
-  killall -0 "${1}" 2> /dev/null
+# _kill_name
+# $1: process name
+# $2: signal (default 15)
+_kill_name() {
+  killall -q -${2:-15} "${1}" || true
 }
 
 # _kill_daemon
 # $1: daemon
 # $2: signal (default 15)
 _kill_daemon() {
-  local _signal="${2:-15}"
-  start-stop-daemon -K -s "${_signal}" -x "${1}" -q || true
-}
-
-# _kill_name
-# $1: process name
-# $2: signal (default 15)
-_kill_name() {
-  local _signal="${2:-15}"
-  killall -${_signal} "${1}" || true
+  start-stop-daemon -K -s ${2:-15} -x "${1}" -q || true
 }
 
 is_running() {
-  if ! _is_name_running "nfsd"; then return 1; fi
-  if ! _is_daemon_running "${statd}"; then return 1; fi
-  if ! _is_daemon_running "${mountd}"; then return 1; fi
-  if ! _is_daemon_running "${rpcbind}"; then return 1; fi
-  return 0;
+#   if ! _is_name_running "nfsd"; then return 1; fi
+#   if ! _is_daemon_running "${statd}"; then return 1; fi
+#   if ! _is_daemon_running "${mountd}"; then return 1; fi
+#   if ! _is_daemon_running "${rpcbind}"; then return 1; fi
+  if _is_name_running "nfsd" || \
+     _is_daemon_running "${statd}" || \
+     _is_daemon_running "${mountd}" || \
+     _is_daemon_running "${rpcbind}"; then
+    return 0
+  fi
+  return 1;
 }
 
 # _is_stopped
@@ -78,16 +89,21 @@ is_stopped() {
   return 0;
 }
 
-# returns a string like "3.2.0 [8.45.72385]"
+# returns a string like "3.2.0 8.45.72385"
 #         or nothing if nasd is not running
 _firmware_version() {
   local line
-  timeout -t 1 /usr/bin/nc 127.0.0.1 5000 2> "${logfile}" | while read line; do
-    if (echo ${line} | grep -q mVersion); then
-      echo ${line} | sed 's|.*<mVersion>\(.*\)</mVersion>.*|\1|g'
-      break;
-    fi
-  done
+  if (which esa > /dev/null) && (esa help | grep -q vxver); then
+    esa vxver
+  else
+    # fallback when there is no esa or no vxver
+    timeout -t 1 nc 127.0.0.1 5000 2> "${logfile}" | while read line; do
+      if (echo ${line} | grep -q mVersion); then
+        echo ${line} | sed 's|.*<mVersion>\(.*\)</mVersion>.*|\1|g'
+        break;
+      fi
+    done
+  fi
 }
 
 _load_modules() {
@@ -96,15 +112,55 @@ _load_modules() {
   local modules="nfsd"
   case "${fversion}" in
     3.5.*) kversion="${kversion}-3.5.0" ; modules="auth_rpcgss ${modules}" ;;
-    3.2.*) kversion="${kversion}-3.2.0" ;;
+    3.3.*|3.2.*) kversion="${kversion}-3.2.0" ;;
     3.1.*|3.0.*) kversion="${kversion}" ;;
     *) eval echo "Unsupported firmware revision: ${fversion}" ${STDOUT}; return 1 ;;
   esac
   for ko in ${modules}; do
-    if [ -z "$(lsmod | grep ^${ko})" ]; then
+    if ! (lsmod | grep -q "^${ko}"); then
       insmod "${prog_dir}/modules/${kversion}/${ko}.ko"
     fi
   done
+}
+
+# Only shares that are exposed for 'Everyone' will be auto-published,
+# since NFS does not support user authentication.
+_load_shares() {
+  local share_count
+  local share_name
+  local everyone
+
+  touch "${autofile}.tmp"
+  share_count=$("${prog_dir}/libexec/xmllint" --xpath "count(//Share)" "${shares_conf}")
+  if [ ${share_count} -eq 0 ]; then
+    echo "No shares found."
+  else
+    echo "Found ${share_count} shares."
+    for i in $(seq 1 ${share_count}); do
+      share_name=$("${prog_dir}/libexec/xmllint" --xpath "//Share[${i}]/ShareName/text()" "${shares_conf}")
+      # $everyone == 1, rw; $everyone == 0, ro; $everyone == '', no access
+      everyone=$("${prog_dir}/libexec/xmllint" --xpath "//Share[${i}]/ShareUsers/ShareUser[ShareUsername/text()='Everyone']/ShareUserAccess/text()" "${shares_conf}" 2> /dev/null) || true
+      if [ -z "${everyone}" ]; then
+        # no access for Everyone
+        continue
+      elif [ ${everyone} -eq 1 ]; then
+        # Everyone has write access
+        echo "${shares_dir}/${share_name} 0.0.0.0/0(rw,insecure,async,no_subtree_check,no_root_squash,anonuid=99,anongid=99)" >> "${autofile}.tmp"
+        echo "${shares_dir}/${share_name} ::/128(rw,insecure,async,no_subtree_check,no_root_squash,anonuid=99,anongid=99)" >> "${autofile}.tmp"
+      elif [ ${everyone} -eq 0 ]; then
+        # Everyone has read-only access
+        echo "${shares_dir}/${share_name} 0.0.0.0/0(ro,insecure,async,no_subtree_check,no_root_squash,anonuid=99,anongid=99)" >> "${autofile}.tmp"
+        echo "${shares_dir}/${share_name} ::/128(ro,insecure,async,no_subtree_check,no_root_squash,anonuid=99,anongid=99)" >> "${autofile}.tmp"
+      fi
+    done
+  fi
+
+  if ! diff -q "${autofile}.tmp" "${autofile}"; then
+    mv "${autofile}.tmp" "${autofile}"
+    cp "${autofile}" "${conffile}"
+  else
+    rm -f "${autofile}.tmp"
+  fi
 }
 
 start() {
@@ -114,7 +170,7 @@ start() {
                          "${prog_dir}/var/lib/nfs/state"
   _load_modules
 
-  if [ -z "$(grep ^nfsd /proc/mounts)" ]; then
+  if ! grep -q "^nfsd" /proc/mounts; then
     mount -t nfsd nfsd "${mountpoint}"
   fi
 
@@ -136,6 +192,11 @@ start() {
     setsid "${statd}" -d &
   fi
 
+  if [ ! -f "${conffile}" ] && [ ! -f "${autofile}" ]; then
+    touch "${conffile}"
+    touch "${autofile}"
+  fi
+
   if ! _is_name_running "nfsd"; then
     setsid "${prog_dir}/sbin/rpc.nfsd" -d 3
   fi
@@ -144,12 +205,12 @@ start() {
 }
 
 stop() {
-  _kill_name "nfsd"
+  _kill_name "nfsd" 2
   _kill_daemon "${smnotify}"
   _kill_daemon "${statd}"
   _kill_daemon "${mountd}"
   _kill_daemon "${rpcbind}"
-  if [ -n "$(grep ^nfsd /proc/mounts)" ]; then
+  if grep -q "^nfsd" /proc/mounts; then
     umount "${mountpoint}"
   fi
 }
@@ -160,12 +221,15 @@ force_stop() {
   _kill_daemon "${statd}" 9
   _kill_daemon "${mountd}" 9
   _kill_daemon "${rpcbind}" 9
-  if [ -n "$(grep ^nfsd /proc/mounts)" ]; then
+  if grep -q "^nfsd" /proc/mounts; then
     umount -lf "${mountpoint}"
   fi
 }
 
 reload() {
+  if [ -f "${autofile}" ]; then
+    _load_shares
+  fi
   "${prog_dir}/sbin/exportfs" -ra
 }
 
@@ -177,7 +241,6 @@ STDERR=">&4"
 echo "$(date +"%Y-%m-%d %H-%M-%S"):" "${0}" "${@}"
 set -o errexit  # exit on uncaught error code
 set -o nounset  # exit on unset variable
-set -o pipefail # propagate last error code on pipe
 set -o xtrace   # enable script tracing
 
 main "${@}"

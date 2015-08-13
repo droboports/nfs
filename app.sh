@@ -11,9 +11,15 @@ pushd "target/${FOLDER}"
 patch -p1 -i "${FOLDER}-api_fixes-1.patch"
 aclocal
 automake
+# /etc adjustment
 sed -i -e "s|/etc/netconfig|${DEST}/etc/netconfig|g" tirpc/netconfig.h
+# /var adjustment
+sed -e "s|/var|$DEST/var|g" -i tirpc/rpc/rpcb_prot.x
+sed -e "s|/var|$DEST/var|g" -i tirpc/rpc/rpcb_prot.h
 
-./configure --host="${HOST}" --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --disable-gssapi
+./configure --host="${HOST}" --prefix="${DEPS}" \
+  --libdir="${DEST}/lib" --disable-static \
+  --disable-gssapi
 make
 make install
 mkdir -p "${DEST}/etc"
@@ -30,7 +36,13 @@ local URL="http://sourceforge.net/projects/rpcbind/files/rpcbind/${VERSION}/${FI
 
 _download_bz2 "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --mandir="${DEST}/man" --without-systemdsystemunitdir
+# /var adjustment
+sed -e "s|/var|$DEST/var|g" -i src/rpcbind.c
+
+PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" \
+  ./configure --host="${HOST}" --prefix="${DEST}" \
+  --mandir="${DEST}/man" \
+  --without-systemdsystemunitdir
 make
 make install
 popd
@@ -45,7 +57,10 @@ local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.26/${FILE}"
 
 _download_xz "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
-./configure --host=arm-none-linux-gnueabi --prefix="${DEPS}" --libdir="${DEST}/lib" --disable-static --without-systemd --without-ncurses --without-python --without-bashcompletiondir --disable-all-programs --enable-libblkid
+./configure --host="${HOST}" --prefix="${DEPS}" \
+  --libdir="${DEST}/lib" --disable-static \
+  --without-systemd --without-ncurses --without-python \
+  --without-bashcompletiondir --disable-all-programs --enable-libblkid
 make
 make install
 ln -vfs "libblkid.so.1.1.0" "${DEST}/lib/libblkid.so"
@@ -65,34 +80,58 @@ pushd "target/${FOLDER}"
 
 # /etc adjustment
 files="support/include/nfslib.h utils/mount/configfile.c utils/gssd/gssd.h utils/gssd/svcgssd.c utils/nfsidmap/nfsidmap.c"
-for f in $files; do sed -i -e "s|/etc|${DEST}/etc|g" $f; done
+for f in $files; do
+  sed -e "s|/etc|${DEST}/etc|g" -i $f
+done
 
 # /sbin adjustment
-sed -i -e "s|/usr/sbin|$DEST/sbin|g" utils/statd/statd.c
-sed -i -e "s|PATH=/sbin:/usr/sbin|PATH=/sbin:/usr/sbin:${DEST}/sbin|g" utils/statd/start-statd
+sed -e "s|/usr/sbin|$DEST/sbin|g" -i utils/statd/statd.c
+sed -e "s|PATH=/sbin:/usr/sbin|PATH=/sbin:/usr/sbin:${DEST}/sbin|g" -i utils/statd/start-statd
 
 files="utils/osd_login/Makefile.in utils/mount/Makefile.in utils/nfsdcltrack/Makefile.in"
-for f in $files; do sed -i -e "s|^sbindir = /sbin|sbindir = ${DEST}/sbin|g" $f; done
+for f in $files; do
+  sed -e "s|^sbindir = /sbin|sbindir = ${DEST}/sbin|g" -i $f
+done
 
 # /var adjustment
-sed -i -e "s|/var|${DEST}/var|g" utils/mount/nfs4mount.c
+sed -e "s|/var|${DEST}/var|g" -i utils/mount/nfs4mount.c
 
 files="tests/test-lib.sh utils/statd/statd.man utils/statd/start-statd utils/statd/statd.c"
-for f in $files; do sed -i -e "s|/var/run/rpc.statd.pid|/tmp/DroboApps/nfs/rpc.statd.pid|g" $f; done
+for f in $files; do
+  sed -e "s|/var/run/rpc.statd.pid|/tmp/DroboApps/nfs/rpc.statd.pid|g" -i $f
+done
 
 files="utils/blkmapd/device-discovery.c"
-for f in $files; do sed -i -e "s|/var/run/blkmapd.pid|/tmp/DroboApps/nfs/blkmapd.pid|g" $f; done
+for f in $files; do
+  sed -e "s|/var/run/blkmapd.pid|/tmp/DroboApps/nfs/blkmapd.pid|g" -i $f
+done
 
 files="utils/statd/sm-notify.c"
-for f in $files; do sed -i -e "s|/var/run/sm-notify.pid|/tmp/DroboApps/nfs/sm-notify.pid|g" $f; done
+for f in $files; do
+  sed -e "s|/var/run/sm-notify.pid|/tmp/DroboApps/nfs/sm-notify.pid|g" -i $f
+done
 
 files="support/include/exportfs.h utils/statd/sm-notify.c utils/idmapd/idmapd.c utils/mount/nfs4mount.c utils/gssd/gssd.h utils/blkmapd/device-discovery.c"
-for f in $files; do sed -i -e "s|\"/var/lib|\"${DEST}/var/lib|g" $f; done
+for f in $files; do
+  sed -e "s|\"/var/lib|\"${DEST}/var/lib|g" -i $f
+done
 
-PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" ./configure --host="${HOST}" --prefix="${DEST}" --exec-prefix="${DEST}" --sbindir="${DEST}/sbin" --mandir="${DEST}/man" --disable-static --with-statedir="${DEST}/var/lib/nfs" --with-statdpath="${DEST}/var/lib/nfs" --with-statduser=nobody --with-start-statd="${DEST}/sbin/start-statd" --without-systemd --with-mountfile="${DEST}/etc/nfsmounts.conf" --without-tcp-wrappers --enable-tirpc --enable-ipv6 --disable-nfsv4 --disable-nfsv41 --disable-gss CC_FOR_BUILD=$CC libblkid_cv_is_recent=yes
+PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" \
+  ./configure --host="${HOST}" --prefix="${DEST}" --exec-prefix="${DEST}" \
+  --sbindir="${DEST}/sbin" --mandir="${DEST}/man" \
+  --disable-static \
+  --with-statedir="${DEST}/var/lib/nfs" \
+  --with-statdpath="${DEST}/var/lib/nfs" \
+  --with-statduser=nobody \
+  --with-start-statd="${DEST}/sbin/start-statd" \
+  --with-mountfile="${DEST}/etc/nfsmounts.conf" \
+  --without-systemd --without-tcp-wrappers \
+  --enable-tirpc --enable-ipv6 --disable-nfsv4 --disable-nfsv41 --disable-gss \
+  CC_FOR_BUILD="${CC}" libblkid_cv_is_recent=yes
 make
 make install
 mkdir -p "${DEST}/etc/exports.d" "${DEST}/var/lib/nfs/statd" "${DEST}/var/lock/subsys" "${DEST}/var/log" "${DEST}/var/run"
+# Drobos do not support NFSv4 clients
 rm -vf "${DEST}/sbin/mount.nfs4" "${DEST}/sbin/umount.nfs4"
 popd
 }
@@ -108,14 +147,18 @@ mkdir -p "${DEST}/modules/${VERSION}"
 cp -vf "download/${VERSION}/${FILE}" "${DEST}/modules/${VERSION}/"
 }
 
+_build_modules() {
+  _build_module 3.2.27 nfsd.ko
+  _build_module 3.2.27-3.2.0 nfsd.ko
+  _build_module 3.2.58-3.5.0 nfsd.ko
+  _build_module 3.2.58-3.5.0 auth_rpcgss.ko
+}
+
 _build() {
   _build_libtirpc
   _build_rpcbind
   _build_libblkid
   _build_nfsutils
-  _build_module 3.2.27 nfsd.ko
-  _build_module 3.2.27-3.2.0 nfsd.ko
-  _build_module 3.2.58-3.5.0 nfsd.ko
-  _build_module 3.2.58-3.5.0 auth_rpcgss.ko
+  _build_modules
   _package
 }
