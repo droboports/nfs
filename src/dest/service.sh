@@ -66,10 +66,6 @@ _kill_daemon() {
 }
 
 is_running() {
-#   if ! _is_name_running "nfsd"; then return 1; fi
-#   if ! _is_daemon_running "${statd}"; then return 1; fi
-#   if ! _is_daemon_running "${mountd}"; then return 1; fi
-#   if ! _is_daemon_running "${rpcbind}"; then return 1; fi
   if _is_name_running "nfsd" || \
      _is_daemon_running "${statd}" || \
      _is_daemon_running "${mountd}" || \
@@ -117,8 +113,8 @@ _load_modules() {
     *) eval echo "Unsupported firmware revision: ${fversion}" ${STDOUT}; return 1 ;;
   esac
   for ko in ${modules}; do
-    if ! (lsmod | grep -q "^${ko}"); then
-      insmod "${prog_dir}/modules/${kversion}/${ko}.ko"
+    if ! (/sbin/lsmod | grep -q "^${ko}"); then
+      /sbin/insmod "${prog_dir}/modules/${kversion}/${ko}.ko"
     fi
   done
 }
