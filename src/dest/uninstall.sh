@@ -16,6 +16,10 @@ set -o errexit  # exit on uncaught error code
 set -o nounset  # exit on unset variable
 set -o xtrace   # enable script tracing
 
+if [ -e /var/lib/nfs ]; then
+  rm -f /var/lib/nfs
+fi
+
 if [ -f "${incron_dir}/${name}" ]; then
   rm -f "${incron_dir}/${name}"
 fi

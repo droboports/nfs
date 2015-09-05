@@ -16,6 +16,12 @@ set -o errexit  # exit on uncaught error code
 set -o nounset  # exit on unset variable
 set -o xtrace   # enable script tracing
 
+if [ -d /var/lib/nfs ] && [ ! -h /var/lib/nfs]; then
+  mv -f /var/lib/nfs/* "${prog_dir}/var/lib/nfs/"
+  rmdir /var/lib/nfs
+fi
+ln -fs "${prog_dir}/var/lib/nfs" /var/lib/
+
 # copy default configuration files
 find "${prog_dir}" -type f -name "*.default" -print | while read deffile; do
   basefile="$(dirname "${deffile}")/$(basename "${deffile}" .default)"
