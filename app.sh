@@ -130,7 +130,7 @@ PKG_CONFIG_PATH="${DEST}/lib/pkgconfig" \
   CC_FOR_BUILD="${CC}" libblkid_cv_is_recent=yes
 make
 make install
-mkdir -p "${DEST}/etc/exports.d" "${DEST}/var/lib/nfs/statd" "${DEST}/var/lock/subsys" "${DEST}/var/log" "${DEST}/var/run"
+mkdir -p "${DEST}/etc/exports.d" "${DEST}/var/lib/nfs/statd" "${DEST}/var/lib/nfs/v4recovery" "${DEST}/var/lock/subsys" "${DEST}/var/log" "${DEST}/var/run"
 # Drobos do not support NFSv4 clients
 rm -vf "${DEST}/sbin/mount.nfs4" "${DEST}/sbin/umount.nfs4"
 popd
