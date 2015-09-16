@@ -971,7 +971,7 @@ start_service() {
   local _appDir="$($DIRNAME "$($REALPATH "${0}")")"
   local _appName="$($BASENAME "${_appDir}")"
 
-  _create_files "${1}"
+  _create_files "${_appName}"
   _prestart_app "${_appName}"
 
   # see if the service is already running

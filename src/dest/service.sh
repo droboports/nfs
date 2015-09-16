@@ -7,10 +7,10 @@
 
 framework_version="2.1"
 name="nfs"
-version="1.3.2-2"
-description="NFS v3 server"
+version="1.3.2-3"
+description="Network File System (NFS) is a distributed file system protocol"
 depends=""
-webui=""
+webui="WebUI"
 
 prog_dir="$(dirname $(realpath ${0}))"
 rpcbind="${prog_dir}/bin/rpcbind"
@@ -107,7 +107,8 @@ _load_modules() {
   local fversion="$(_firmware_version)"
   local modules="nfsd"
   case "${fversion}" in
-    3.5.*) kversion="${kversion}-3.5.0" ; modules="auth_rpcgss ${modules}" ;;
+    3.5.0) kversion="${kversion}-3.5.0" ; modules="auth_rpcgss ${modules}" ;;
+    3.5.*) kversion="${kversion}-3.5.1" ;;
     3.3.*|3.2.*) kversion="${kversion}-3.2.0" ;;
     3.1.*|3.0.*) kversion="${kversion}" ;;
     *) eval echo "Unsupported firmware revision: ${fversion}" ${STDOUT}; return 1 ;;
