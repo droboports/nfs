@@ -108,7 +108,7 @@ _load_modules() {
   local modules="nfsd"
   case "${fversion}" in
     3.5.0) kversion="${kversion}-3.5.0" ; modules="auth_rpcgss ${modules}" ;;
-    3.5.*) kversion="${kversion}-3.5.1" ;;
+    3.5.*|Dev*) kversion="${kversion}-3.5.1" ;;
     3.3.*|3.2.*) kversion="${kversion}-3.2.0" ;;
     3.1.*|3.0.*) kversion="${kversion}" ;;
     *) eval echo "Unsupported firmware revision: ${fversion}" ${STDOUT}; return 1 ;;
