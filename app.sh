@@ -148,12 +148,9 @@ cp -vf "download/${VERSION}/${FILE}" "${DEST}/modules/${VERSION}/"
 }
 
 _build_modules() {
-  _build_module 3.2.27 nfsd.ko
+  _build_module 3.2.27-3.1.1 nfsd.ko
   _build_module 3.2.27-3.2.0 nfsd.ko
   _build_module 3.2.27-3.3.0 nfsd.ko
-  _build_module 3.2.58-3.5.0 nfsd.ko
-  _build_module 3.2.58-3.5.0 auth_rpcgss.ko
-  _build_module 3.2.58-3.5.1 nfsd.ko
 }
 
 _build() {

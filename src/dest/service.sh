@@ -7,7 +7,7 @@
 
 framework_version="2.1"
 name="nfs"
-version="1.3.2-3"
+version="1.3.2-4"
 description="Network File System (NFS) is a distributed file system protocol"
 depends=""
 webui="WebUI"
@@ -85,40 +85,37 @@ is_stopped() {
   return 0;
 }
 
-# returns a string like "3.2.0 8.45.72385"
+# returns a string like "3.3.0"
 #         or nothing if nasd is not running
 _firmware_version() {
   local line
-  if (which esa > /dev/null) && (esa help | grep -q vxver); then
-    esa vxver
+  if [ ! -f /usr/bin/esa ]; then
+    echo 3.1.1
+  elif (cd /usr/bin && esa help | grep -q vxver); then
+    echo 3.2.0
   else
-    # fallback when there is no esa or no vxver
-    timeout -t 1 nc 127.0.0.1 5000 2> "${logfile}" | while read line; do
-      if (echo ${line} | grep -q mVersion); then
-        echo ${line} | sed 's|.*<mVersion>\(.*\)</mVersion>.*|\1|g'
-        break;
-      fi
-    done
+    /usr/bin/esa vxver | /usr/bin/head -n 1 | /usr/bin/cut -d " " -f 1
   fi
 }
 
 _load_modules() {
-  local kversion="$(uname -r)"
-  local fversion="$(_firmware_version)"
-  local modules="nfsd"
-  case "${fversion}" in
-    3.5.0) kversion="${kversion}-3.5.0" ; modules="auth_rpcgss ${modules}" ;;
-    3.5.*|Dev*) kversion="${kversion}-3.5.1" ;;
-    3.3.*) kversion="${kversion}-3.3.0" ;;
-    3.2.*) kversion="${kversion}-3.2.0" ;;
-    3.1.*|3.0.*) kversion="${kversion}" ;;
-    *) eval echo "Unsupported firmware revision: ${fversion}" ${STDOUT}; return 1 ;;
-  esac
-  for ko in ${modules}; do
+  local kversion
+  local rc
+
+  # first try downloading
+  "${prog_dir}/libexec/dlmod.sh" "nfsd" && rc=$? || rc=$?
+  if [ ${rc} -ne 0 ]; then
+    # it failed, try included modules
+    kversion="$(uname -r)-$(_firmware_version)"
     if ! (/sbin/lsmod | grep -q "^${ko}"); then
-      /sbin/insmod "${prog_dir}/modules/${kversion}/${ko}.ko"
+      /sbin/insmod "${prog_dir}/modules/${kversion}/nfsd.ko" && rc=$? || rc=$?
+      if [ ${rc} -ne 0 ]; then
+        echo "1" > "${errorfile}"
+        echo "Unable to load kernel modules, please see log.txt for more information." > "${statusfile}"
+        return 1
+      fi
     fi
-  done
+  fi
 }
 
 # Only shares that are exposed for 'Everyone' will be auto-published,
@@ -162,6 +159,8 @@ _load_shares() {
 }
 
 start() {
+  rm -vf "${errorfile}" "${statusfile}"
+
   chmod 4511 "${prog_dir}/sbin/mount.nfs"
   chown -R "${statuser}" "${prog_dir}/var/lib/nfs/sm" \
                          "${prog_dir}/var/lib/nfs/sm.bak" \
