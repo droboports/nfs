@@ -1,0 +1,34 @@
+set daemon 30
+set pidfile /tmp/DroboApps/nfs/pid.txt
+set logfile /tmp/DroboApps/nfs/log.txt
+set idfile /tmp/DroboApps/nfs/monit.id
+set statefile /tmp/DroboApps/nfs/monit.state
+set httpd unixsocket /tmp/DroboApps/nfs/monit.sock allow nfs:nfs
+
+check process rpcbind
+  matching "rpcbind"
+  start = "/mnt/DroboFS/Shares/DroboApps/nfs/bin/rpcbind"
+  stop = "/sbin/start-stop-daemon -K -x /mnt/DroboFS/Shares/DroboApps/nfs/bin/rpcbind"
+  if failed port 111 then restart
+  if failed port 111 type udp then restart
+
+check process mountd
+  matching "rpc.mountd"
+  depends on rpcbind
+  start = "/mnt/DroboFS/Shares/DroboApps/nfs/sbin/rpc.mountd"
+  stop = "/sbin/start-stop-daemon -K -x /mnt/DroboFS/Shares/DroboApps/nfs/sbin/rpc.mountd"
+
+check process statd
+  matching "rpc.statd"
+  depends on rpcbind
+  start = "/mnt/DroboFS/Shares/DroboApps/nfs/sbin/rpc.statd"
+  stop = "/sbin/start-stop-daemon -K -x /mnt/DroboFS/Shares/DroboApps/nfs/sbin/rpc.statd"
+
+check process nfsd
+  matching "nfsd"
+  depends on rpcbind, mountd, statd
+  start = "/mnt/DroboFS/Shares/DroboApps/nfs/sbin/rpc.nfsd -d 3"
+  stop = "/usr/bin/killall -2 nfsd"
+
+check file exports with path /mnt/DroboFS/Shares/DroboApps/nfs/etc/exports
+  if changed checksum then exec "/mnt/DroboFS/Shares/DroboApps/nfs/sbin/exportfs -ra"

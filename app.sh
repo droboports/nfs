@@ -50,17 +50,18 @@ popd
 
 ### LIBBLKID ###
 _build_libblkid() {
-local VERSION="2.26.2"
+local VERSION="2.27.1"
 local FOLDER="util-linux-${VERSION}"
 local FILE="${FOLDER}.tar.xz"
-local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.26/${FILE}"
+local URL="https://www.kernel.org/pub/linux/utils/util-linux/v2.27/${FILE}"
 
 _download_xz "${FILE}" "${URL}" "${FOLDER}"
 pushd "target/${FOLDER}"
 ./configure --host="${HOST}" --prefix="${DEPS}" \
   --libdir="${DEST}/lib" --disable-static \
-  --without-systemd --without-ncurses --without-python \
-  --without-bashcompletiondir --disable-all-programs --enable-libblkid
+  --without-systemd --without-ncurses --without-termcap --without-tinfo --without-python \
+  --without-bashcompletiondir --disable-all-programs --disable-colors-default \
+  --enable-libblkid
 make
 make install
 ln -vfs "libblkid.so.1.1.0" "${DEST}/lib/libblkid.so"
@@ -69,7 +70,7 @@ popd
 
 ### NFSUTILS ###
 _build_nfsutils() {
-local VERSION="1.3.2"
+local VERSION="1.3.3"
 local FOLDER="nfs-utils-${VERSION}"
 local FILE="${FOLDER}.tar.bz2"
 local URL="http://sourceforge.net/projects/nfs/files/nfs-utils/${VERSION}/${FILE}"
@@ -136,21 +137,24 @@ rm -vf "${DEST}/sbin/mount.nfs4" "${DEST}/sbin/umount.nfs4"
 popd
 }
 
-### MODULES ###
-_build_module() {
-local VERSION="$1"
-local FILE="$2"
-local URL="https://github.com/droboports/kernel-drobo${DROBO}/releases/download/v${VERSION}/${FILE}"
+### MONIT ###
+_build_monit() {
+local VERSION="5.15"
+local FOLDER="monit-${VERSION}"
+local FILE="${FOLDER}.tar.gz"
+local URL="https://mmonit.com/monit/dist/${FILE}"
 
-_download_file_in_folder "${FILE}" "${URL}" "${VERSION}"
-mkdir -p "${DEST}/modules/${VERSION}"
-cp -vf "download/${VERSION}/${FILE}" "${DEST}/modules/${VERSION}/"
-}
-
-_build_modules() {
-  _build_module 3.2.27-3.1.1 nfsd.ko
-  _build_module 3.2.27-3.2.0 nfsd.ko
-  _build_module 3.2.27-3.3.0 nfsd.ko
+_download_tgz "${FILE}" "${URL}" "${FOLDER}"
+pushd "target/${FOLDER}"
+./configure --host="${HOST}" --prefix="${DEPS}" --bindir="${DEST}/libexec" \
+  --sysconfdir="${DEST}/etc" \
+  --enable-static --disable-shared \
+  --without-pam --without-ssl \
+  libmonit_cv_setjmp_available=yes libmonit_cv_vsnprintf_c99_conformant=yes
+make
+make install
+"${STRIP}" -s -R .comment -R .note -R .note.ABI-tag "${DEST}/libexec/monit"
+popd
 }
 
 _build() {
@@ -158,6 +162,6 @@ _build() {
   _build_rpcbind
   _build_libblkid
   _build_nfsutils
-  _build_modules
+  _build_monit
   _package
 }

@@ -7,24 +7,19 @@
 
 framework_version="2.1"
 name="nfs"
-version="1.3.2-4"
+version="1.3.3"
 description="Network File System (NFS) is a distributed file system protocol"
 depends=""
 webui="WebUI"
 
-prog_dir="$(dirname $(realpath ${0}))"
-rpcbind="${prog_dir}/bin/rpcbind"
-mountd="${prog_dir}/sbin/rpc.mountd"
-statd="${prog_dir}/sbin/rpc.statd"
-nfsd="${prog_dir}/sbin/rpc.nfsd"
-smnotify="${prog_dir}/sbin/sm-notify"
+prog_dir="$(dirname "$(realpath "${0}")")"
+daemon="${prog_dir}/libexec/monit"
 tmp_dir="/tmp/DroboApps/${name}"
+pidfile="${tmp_dir}/pid.txt"
 logfile="${tmp_dir}/log.txt"
 statusfile="${tmp_dir}/status.txt"
 errorfile="${tmp_dir}/error.txt"
 statuser="nobody"
-mountpoint="/proc/fs/nfsd"
-lockfile="${tmp_dir}/rpcbind.lock"
 
 conffile="${prog_dir}/etc/exports"
 autofile="${conffile}.auto"
@@ -32,90 +27,36 @@ shares_conf="/mnt/DroboFS/System/DNAS/configs/shares.conf"
 shares_dir="/mnt/DroboFS/Shares"
 rescan=""
 
-# backwards compatibility
-if [ -z "${FRAMEWORK_VERSION:-}" ]; then
-  framework_version="2.0"
-  . "${prog_dir}/libexec/service.subr"
-fi
-
-# _is_name_running
-# returns: 0 if process name is running, 1 if not running.
-_is_name_running() {
-  killall -0 "${1}" 2> /dev/null
-}
-
-# _is_daemon_running
-# $1: daemon
-# returns: 0 if daemon is running, 1 if not running.
-_is_daemon_running() {
-  start-stop-daemon -K -t -x "${1}" -q
-}
-
-# _kill_name
-# $1: process name
-# $2: signal (default 15)
-_kill_name() {
-  killall -q -${2:-15} "${1}" || true
-}
-
-# _kill_daemon
-# $1: daemon
-# $2: signal (default 15)
-_kill_daemon() {
-  start-stop-daemon -K -s ${2:-15} -x "${1}" -q || true
-}
-
-is_running() {
-  if _is_name_running "nfsd" || \
-     _is_daemon_running "${statd}" || \
-     _is_daemon_running "${mountd}" || \
-     _is_daemon_running "${rpcbind}"; then
-    return 0
+# check firmware version
+_firmware_check() {
+  local rc
+  local semver
+  rm -f "${statusfile}" "${errorfile}"
+  if [ -z "${FRAMEWORK_VERSION:-}" ]; then
+    echo "Unsupported Drobo firmware, please upgrade to the latest version." > "${statusfile}"
+    echo "4" > "${errorfile}"
+    return 1
   fi
-  return 1;
-}
-
-# _is_stopped
-# returns: 0 if stopped, 1 if running.
-is_stopped() {
-  if _is_name_running "nfsd"; then return 1; fi
-  if _is_daemon_running "${statd}"; then return 1; fi
-  if _is_daemon_running "${mountd}"; then return 1; fi
-  if _is_daemon_running "${rpcbind}"; then return 1; fi
-  return 0;
-}
-
-# returns a string like "3.3.0"
-#         or nothing if nasd is not running
-_firmware_version() {
-  local line
-  if [ ! -f /usr/bin/esa ]; then
-    echo 3.1.1
-  elif (cd /usr/bin && esa help | grep -q vxver); then
-    echo 3.2.0
-  else
-    /usr/bin/esa vxver | /usr/bin/head -n 1 | /usr/bin/cut -d " " -f 1
+  semver="$(/usr/bin/semver.sh "${framework_version}" "${FRAMEWORK_VERSION}")"
+  if [ "${semver}" == "1" ]; then
+    echo "Unsupported Drobo firmware, please upgrade to the latest version." > "${statusfile}"
+    echo "4" > "${errorfile}"
+    return 1
   fi
+  return 0
 }
 
+# Download and load the required kernel modules
 _load_modules() {
-  local kversion
   local rc
 
-  # first try downloading
   "${prog_dir}/libexec/dlmod.sh" "nfsd" && rc=$? || rc=$?
   if [ ${rc} -ne 0 ]; then
-    # it failed, try included modules
-    kversion="$(uname -r)-$(_firmware_version)"
-    if ! (/sbin/lsmod | grep -q "^${ko}"); then
-      /sbin/insmod "${prog_dir}/modules/${kversion}/nfsd.ko" && rc=$? || rc=$?
-      if [ ${rc} -ne 0 ]; then
-        echo "1" > "${errorfile}"
-        echo "Unable to load kernel modules, please see log.txt for more information." > "${statusfile}"
-        return 1
-      fi
-    fi
+    echo "1" > "${errorfile}"
+    echo "Unable to load kernel modules, please see log.txt for more information." > "${statusfile}"
+    return 1
   fi
+  return 0
 }
 
 # Only shares that are exposed for 'Everyone' will be auto-published,
@@ -159,68 +100,39 @@ _load_shares() {
 }
 
 start() {
-  rm -vf "${errorfile}" "${statusfile}"
+  _firmware_check
 
   chmod 4511 "${prog_dir}/sbin/mount.nfs"
   chown -R "${statuser}" "${prog_dir}/var/lib/nfs/sm" \
                          "${prog_dir}/var/lib/nfs/sm.bak" \
                          "${prog_dir}/var/lib/nfs/state"
   _load_modules
-
-  if ! grep -q "^nfsd" /proc/mounts; then
-    mount -t nfsd nfsd "${mountpoint}"
-  fi
-
-  _kill_daemon "${smnotify}"
-
-  if ! _is_daemon_running "${rpcbind}"; then
-    "${rpcbind}"
-    sleep 1
-    _kill_name "nfsd"
-    _kill_daemon "${statd}"
-    _kill_daemon "${mountd}"
-  fi
-
-  if ! _is_daemon_running "${mountd}"; then
-    "${mountd}" -d auth
-  fi
-
-  if ! _is_daemon_running "${statd}"; then
-    setsid "${statd}" -d &
-  fi
+  if ! grep -q '^nfsd' /proc/mounts; then mount -t nfsd nfsd /proc/fs/nfsd; fi
+  cp -f "${prog_dir}/etc/netconfig.default" "${prog_dir}/etc/netconfig"
 
   if [ ! -f "${conffile}" ] && [ ! -f "${autofile}" ]; then
     touch "${conffile}"
     touch "${autofile}"
   fi
-
-  if ! _is_name_running "nfsd"; then
-    setsid "${prog_dir}/sbin/rpc.nfsd" -d 3
-  fi
-
   reload
+
+  "${prog_dir}/libexec/monit" -c "${prog_dir}/etc/monitrc"
+  "${prog_dir}/libexec/monit" -c "${prog_dir}/etc/monitrc" start all
 }
 
 stop() {
-  _kill_name "nfsd" 2
-  _kill_daemon "${smnotify}"
-  _kill_daemon "${statd}"
-  _kill_daemon "${mountd}"
-  _kill_daemon "${rpcbind}"
-  if grep -q "^nfsd" /proc/mounts; then
-    umount "${mountpoint}"
-  fi
+  "${prog_dir}/libexec/monit" -c "${prog_dir}/etc/monitrc" stop all
+  "${prog_dir}/libexec/monit" -c "${prog_dir}/etc/monitrc" quit
+  killall -q -2 nfsd || true
+  killall -q sm-notify rpc.statd rpc.mountd rpcbind || true
+  start-stop-daemon -K -s 9 -x "${daemon}" -p "${pidfile}" -q || true
+  if grep -q '^nfsd' /proc/mounts; then umount -lf /proc/fs/nfsd; fi
 }
 
 force_stop() {
-  _kill_name "nfsd" 9
-  _kill_daemon "${smnotify}" 9
-  _kill_daemon "${statd}" 9
-  _kill_daemon "${mountd}" 9
-  _kill_daemon "${rpcbind}" 9
-  if grep -q "^nfsd" /proc/mounts; then
-    umount -lf "${mountpoint}"
-  fi
+  killall -q -9 nfsd sm-notify rpc.statd rpc.mountd rpcbind || true
+  start-stop-daemon -K -s 9 -x "${daemon}" -p "${pidfile}" -q || true
+  if grep -q "^nfsd" /proc/mounts; then umount -lf /proc/fs/nfsd; fi
 }
 
 reload() {

@@ -1,7 +1,7 @@
 <?php 
 $app = "nfs";
 $appname = "NFS";
-$appversion = "1.3.2-4";
+$appversion = "1.3.3";
 $appsite = "http://nfs.sourceforge.net/";
 $apphelp = "http://sourceforge.net/p/nfs/discussion/133302/";
 

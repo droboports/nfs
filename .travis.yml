@@ -33,6 +33,8 @@ script: ./build.sh
 
 after_failure: cat logfile_* | nc termbin.com 9999
 
+after_success: curl -i -X POST -F "file=@$(ls *.tgz)" -F "expire=86400" -F "submit=Upload%20it!" http://tempsend.com/send
+
 branches:
   only:
     - master
